@@ -1,0 +1,71 @@
+    /*  
+    * GPIO cape dts file BB-BONE-GPIO-00A0.dts  
+    */  
+    /dts-v1/;  
+    /plugin/;  
+      
+    / {  
+      compatible = "ti,beaglebone", "ti,beaglebone-black";  
+      
+      /* identification */  
+      part-number = "BB-BONE-GPIO";  
+      version = "00A0";  
+      
+      exclusive-use =  
+        "P8.45",
+        "P8.46",
+        "P8.43",
+        "P8.44",
+        "P8.41",
+        "P8.42",
+        "P8.39",
+        "P8.40",
+        "P8.37",
+        "P8.38",
+        "P8.36",
+		"P8.34",
+		"P8.12",
+		"pr1_pru0_pru_r30_14",
+        "P8.35",
+		"P8.33",
+		"P8.31";  
+      
+      fragment@0 {  
+        target = <&am33xx_pinmux>;  
+        __overlay__ {  
+          mygpio: pinmux_mygpio{  
+            pinctrl-single,pins = <  
+              0xA0 0x07 // GPIO2_6, P8.45, DATA_LSB
+              0xA4 0x07 // GPIO2_7, P8.46, DATA_D1
+              0xA8 0x07 // GPIO2_8, P8.43, DATA_D2
+              0xAC 0x07 // GPIO2_9, P8.44, DATA_D3
+              0xB0 0x07 // GPIO2_10, P8.41, DATA_D4
+              0xB4 0x07 // GPIO2_11, P8.42, DATA_D5
+              0xB8 0x07 // GPIO2_12, P8.39, DATA_D6
+              0xBC 0x07 // GPIO2_13, P8.40, DATA_D7
+              0xC0 0x07 // GPIO2_14, P8.37, DATA_D8
+              0xC4 0x07 // GPIO2_15, P8.38, DATA_MSB
+			  0xC8 0x07 // GPIO2_16, P8.36, SELECT
+			  0xCC 0x07 // GPIO2_17, P8.34, RESET
+              0x30 0x06 // GPIO1_12, P8.12, CLOCK/WRITE, Enhanced GPIO
+              0xD0 0x17 // GPIO2_15, P8.35, ENXX, PULLUP OUTPUT ONLY
+			  0xD4 0x37 // GPIO2_16, P8.33, SSDATA, PULLUP, RECEIVER ENABLED
+			  0xD8 0x17 // GPIO2_17, P8.31, SSCLK, PULLUP OUTPUT ONLY
+              >;  
+          };  
+        };  
+      };  
+      
+      fragment@1 {  
+        target = <&ocp>;  
+        __overlay__ {  
+          test_helper: helper {  
+            compatible = "bone-pinmux-helper";  
+            pinctrl-names = "default";  
+            pinctrl-0 = <&mygpio>;  
+            status = "okay";  
+          };  
+        };  
+      };  
+      
+    };  
