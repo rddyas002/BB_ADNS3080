@@ -14,6 +14,7 @@
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
 #include <stdbool.h>
+#include <signal.h>
 
 #define GPIO0_BASE 0x44E07000
 #define GPIO1_BASE 0x4804C000
@@ -120,57 +121,67 @@ uint8_t spi_read_reg(int fd, uint8_t reg){
 	int ret = ioctl(fd, SPI_IOC_MESSAGE(2), &tr[0]);
 	if (ret < 1)
 		pabort("can't send spi message");
-/*
-	usleep(75);
-	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
-	if (ret < 1)
-		pabort("can't send spi message");
-*/
+
 	return rx;	
 }
 
 void spi_read_data(int fd, uint8_t reg, uint8_t rxbuffer[], uint8_t length){
-	uint8_t * tx = (uint8_t *) malloc(length);
-	*tx = reg;
-	*tx &= 0x7F;		// ensure bit 7 is 0
-	struct spi_ioc_transfer tr = {
-		.tx_buf = (unsigned long)tx,
-		.rx_buf = (unsigned long)rxbuffer,
-		.len = length,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};
-	int ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+	uint8_t tx = reg;
+	tx &= 0x7F;		// ensure bit 7 is 0
+
+	struct spi_ioc_transfer tr[2];		// send two transfers
+	tr[0].tx_buf = (unsigned long)&tx;
+	tr[0].rx_buf = NULL;
+	tr[0].len = 1;
+	tr[0].delay_usecs = 75;			// 75us delay from reg to data
+	tr[0].speed_hz = speed;
+	tr[0].bits_per_word = bits;
+	tr[0].cs_change = 0;			// hold chip select low
+
+	tr[1].tx_buf = NULL;
+	tr[1].rx_buf = (unsigned long)&rxbuffer[0];
+	tr[1].len = length;
+	tr[1].delay_usecs = 75;
+	tr[1].speed_hz = speed;
+	tr[1].bits_per_word = bits;
+	tr[1].cs_change = 1;
+
+	int ret = ioctl(fd, SPI_IOC_MESSAGE(2), &tr[0]);
 	if (ret < 1)
 		pabort("can't send spi message");
-
-	usleep(75);
-	ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
-	if (ret < 1)
-		pabort("can't send spi message");
-
-	free(tx);
 }
 
 void spi_write_reg(int fd, uint8_t reg, uint8_t data){
-	uint8_t tx[2] = {0};
-	uint8_t rx[2] = {0};
-	tx[0] = reg;
+	uint8_t tx_reg = reg;
+	uint8_t tx_data = data;
 	// set msb to indicate write
-	tx[0] |= 0x80;
-	tx[1] = data;
-	struct spi_ioc_transfer tr = {
-		.tx_buf = (unsigned long)tx,
-		.rx_buf = (unsigned long)rx,
-		.len = 2,
-		.delay_usecs = delay,
-		.speed_hz = speed,
-		.bits_per_word = bits,
-	};
-	int ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+	tx_reg |= 0x80;
+
+	struct spi_ioc_transfer tr[2];		// send two transfers
+	tr[0].tx_buf = (unsigned long)&tx_reg;
+	tr[0].rx_buf = NULL;
+	tr[0].len = 1;
+	tr[0].delay_usecs = 75;			// 75us delay from reg to data
+	tr[0].speed_hz = speed;
+	tr[0].bits_per_word = bits;
+	tr[0].cs_change = 0;			// hold chip select low
+
+	tr[1].tx_buf = (unsigned long)&tx_data;
+	tr[1].rx_buf = NULL;
+	tr[1].len = 1;
+	tr[1].delay_usecs = 75;
+	tr[1].speed_hz = speed;
+	tr[1].bits_per_word = bits;
+	tr[1].cs_change = 1;
+
+	int ret = ioctl(fd, SPI_IOC_MESSAGE(2), &tr[0]);
 	if (ret < 1)
 		pabort("can't send spi message");
+}
+
+static volatile int keepRunning = 1;
+void intHandler(int dummy) {
+    keepRunning = 0;
 }
 
 int main(void){
@@ -241,10 +252,11 @@ int main(void){
 	uint8_t config = spi_read_reg(spi_fd, ADNS3080_INV_PRODUCT_ID);
 	printf("Inverse PID: 0x%02X\r\n", config);
 	usleep(50);
-/*
+
 	config = spi_read_reg(spi_fd, ADNS3080_CONFIGURATION_BITS);
 	printf("Default configuration: 0x%02X\r\n", config);
 	usleep(50);
+
 	spi_write_reg(spi_fd, ADNS3080_CONFIGURATION_BITS, config | (1 << 4));
 	usleep(50);
 	config = spi_read_reg(spi_fd, ADNS3080_CONFIGURATION_BITS);
@@ -252,13 +264,11 @@ int main(void){
 	usleep(50);
 
 	uint8_t buffer[10] = {0};
-	spi_read_data(spi_fd, ADNS3080_MOTION_BURST, buffer, 5);
-	int i;
-	for (i = 0; i < 5; i++){
-		printf("0x%02X ", buffer[i]);
+	while(keepRunning){
+		spi_read_data(spi_fd, ADNS3080_MOTION_BURST, buffer, 4);
+		printf("m: 0x%02X x: %4d y:%4d q:%u\r\n", buffer[0], (int8_t)buffer[1], (int8_t)buffer[2], buffer[3]);
+		usleep(100000);
 	}
-	printf("\r\n");
-*/
 	close(mem_v);
 	close(spi_fd);
 	return 0;
